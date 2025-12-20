@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { solarScene } from '../data/solarScene';
 import { latLonToMeters } from '../geo/latLonToMeters';
+import { getSunPosition } from '../solar/sunPosition';
 
 export function initScene() {
   // Create renderer
@@ -53,6 +54,24 @@ export function initScene() {
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
   });
+
+  // --- Sun visualization ---
+  // Get sun position for now at scene center
+  const now = new Date();
+  const { azimuth, elevation } = getSunPosition(now, solarScene.location.lat, solarScene.location.lon);
+  // Convert azimuth/elevation to 3D direction (Three.js: azimuth CW from North, elevation from horizon)
+  const sunDist = 1000; // distance from center
+  const azRad = azimuth * Math.PI / 180;
+  const elRad = elevation * Math.PI / 180;
+  const sunX = sunDist * Math.cos(elRad) * Math.sin(azRad);
+  const sunY = sunDist * Math.cos(elRad) * Math.cos(azRad);
+  const sunZ = sunDist * Math.sin(elRad);
+  // Sun sphere
+  const sunGeom = new THREE.SphereGeometry(30, 32, 32);
+  const sunMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
+  const sunMesh = new THREE.Mesh(sunGeom, sunMat);
+  sunMesh.position.set(sunX, sunY, sunZ);
+  scene.add(sunMesh);
 
   // Render loop
   function animate() {
