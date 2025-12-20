@@ -130,25 +130,51 @@ export function initScene() {
   // Raycaster for picking
   const raycaster = new THREE.Raycaster();
   renderer.domElement.addEventListener('pointerdown', (event) => {
-    if (!placingPanel) return;
-    // Get mouse position in normalized device coordinates
-    const rect = renderer.domElement.getBoundingClientRect();
-    const mouse = new THREE.Vector2(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1
-    );
-    raycaster.setFromCamera(mouse, camera);
-    // Intersect with roof meshes only
-    const intersects = raycaster.intersectObjects(roofMeshes.map(r => r.mesh));
-    if (intersects.length > 0) {
-      const hit = intersects[0];
-      // Store panel position (on roof)
-      placedPanels.push({
-        position: hit.point.clone(),
-        roofIdx: roofMeshes.findIndex(r => r.mesh === hit.object)
-      });
-      // Visualize panel immediately
-      addPanelMesh(hit.point);
+    // Left-click (button 0): Add panel (only in placement mode)
+    if (event.button === 0 && placingPanel) {
+      // Get mouse position in normalized device coordinates
+      const rect = renderer.domElement.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      raycaster.setFromCamera(mouse, camera);
+      // Intersect with roof meshes only
+      const intersects = raycaster.intersectObjects(roofMeshes.map(r => r.mesh));
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        // Store panel position (on roof)
+        placedPanels.push({
+          position: hit.point.clone(),
+          roofIdx: roofMeshes.findIndex(r => r.mesh === hit.object)
+        });
+        // Visualize panel immediately
+        addPanelMesh(hit.point);
+      }
+    }
+
+    // Right-click (button 2): Remove panel (always available)
+    if (event.button === 2) {
+      event.preventDefault();
+      const rect = renderer.domElement.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      raycaster.setFromCamera(mouse, camera);
+      // Intersect with panel meshes only
+      const intersects = raycaster.intersectObjects(panelMeshes);
+      if (intersects.length > 0) {
+        const hitPanel = intersects[0].object;
+        // Remove from scene
+        scene.remove(hitPanel);
+        // Remove from arrays
+        const idx = panelMeshes.indexOf(hitPanel);
+        if (idx !== -1) {
+          panelMeshes.splice(idx, 1);
+          placedPanels.splice(idx, 1);
+        }
+      }
     }
   });
 
@@ -166,32 +192,7 @@ export function initScene() {
   }
 
   // Remove panel on right-click (pointerdown, button 2)
-  renderer.domElement.addEventListener('pointerdown', (event) => {
-    if (event.button !== 2) return; // right mouse button only
-    event.preventDefault();
-    // Get mouse position in normalized device coordinates
-    const rect = renderer.domElement.getBoundingClientRect();
-    const mouse = new THREE.Vector2(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1
-    );
-    raycaster.setFromCamera(mouse, camera);
-    // Intersect with panel meshes only
-    const intersects = raycaster.intersectObjects(panelMeshes);
-    if (intersects.length > 0) {
-      const hitPanel = intersects[0].object;
-      // Remove from scene
-      scene.remove(hitPanel);
-      // Remove from arrays
-      const idx = panelMeshes.indexOf(hitPanel);
-      if (idx !== -1) {
-        panelMeshes.splice(idx, 1);
-        placedPanels.splice(idx, 1);
-      }
-    }
-  });
-  // Prevent default context menu for robustness
-  renderer.domElement.addEventListener('contextmenu', (event) => event.preventDefault());
+  // (Already handled above in the unified pointerdown listener)
 
   // Remove all panels when button is clicked
   const removePanelsBtn = document.getElementById('remove-panels');
