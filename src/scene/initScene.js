@@ -64,7 +64,8 @@ export function initScene() {
 
   // Add a ground plane to receive shadows (X-Y plane, Z=0)
   const groundGeo = new THREE.PlaneGeometry(3000, 3000);
-  const groundMat = new THREE.MeshPhongMaterial({ color: 0xe0e0e0, side: THREE.DoubleSide });
+  // Use a light blue color for the ground for better contrast
+  const groundMat = new THREE.MeshPhongMaterial({ color: 0xb3d1ff, side: THREE.DoubleSide });
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.position.set(0, 0, 0);
   ground.receiveShadow = true;
@@ -87,7 +88,8 @@ export function initScene() {
     });
     // Place base at Z=0
     geometry.translate(0, 0, 0);
-    const material = new THREE.MeshLambertMaterial({ color: 0x999999 });
+    // Make buildings white for maximum visibility
+    const material = new THREE.MeshLambertMaterial({ color: 0xffffff });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -95,11 +97,23 @@ export function initScene() {
   });
 
   // --- Sun visualization ---
-  const sunGeom = new THREE.SphereGeometry(30, 32, 32);
-  const sunMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
+  // Sun sphere with emissive material for glow effect
+  const sunGeom = new THREE.SphereGeometry(40, 32, 32);
+  const sunMat = new THREE.MeshPhongMaterial({ color: 0xFFD700, emissive: 0xFFD700, emissiveIntensity: 1 });
   const sunMesh = new THREE.Mesh(sunGeom, sunMat);
   sunMesh.position.set(sunX, sunY, sunZ);
+  sunMesh.castShadow = false;
+  sunMesh.receiveShadow = false;
   scene.add(sunMesh);
+
+  // Add a subtle sunbeam (directional helper)
+  const sunDir = new THREE.Vector3(sunX, sunY, sunZ).normalize();
+  const sunRayGeom = new THREE.CylinderGeometry(2, 2, sunDist * 0.8, 8, 1, true);
+  const sunRayMat = new THREE.MeshBasicMaterial({ color: 0xFFFACD, transparent: true, opacity: 0.25 });
+  const sunRay = new THREE.Mesh(sunRayGeom, sunRayMat);
+  sunRay.position.set(sunX/2, sunY/2, sunZ/2);
+  sunRay.lookAt(0, 0, 0);
+  scene.add(sunRay);
 
   // Enable shadow mapping
   renderer.shadowMap.enabled = true;
