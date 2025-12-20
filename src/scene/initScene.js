@@ -5,6 +5,9 @@ import { latLonToMeters } from '../geo/latLonToMeters';
 import { getSunPosition } from '../solar/sunPosition';
 import { calcIrradiance } from '../solar/irradiance';
 
+// Store panel positions globally for now
+const placedPanels = [];
+
 export function initScene() {
   // Create renderer
   const container = document.getElementById('threejs-container');
@@ -73,7 +76,9 @@ export function initScene() {
   scene.add(ground);
 
   // Add buildings with shadow casting (extrude along Z) and color roofs by irradiance
-  solarScene.buildings.forEach(b => {
+  // Also keep a reference to each roof mesh for picking
+  const roofMeshes = [];
+  solarScene.buildings.forEach((b, idx) => {
     const shape = new THREE.Shape();
     b.footprint.forEach(([lon, lat], i) => {
       const [x, y] = latLonToMeters(lat, lon);
@@ -103,12 +108,63 @@ export function initScene() {
       new THREE.MeshLambertMaterial({ color }) // roof
     ];
     // Use groups created by ExtrudeGeometry: group 0 = walls, group 1 = roof
-    // (ExtrudeGeometry automatically creates these groups)
     const mesh = new THREE.Mesh(geometry, materials);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     scene.add(mesh);
+
+    // Store for picking
+    roofMeshes.push({ mesh, building: b, shape, idx });
   });
+
+  // --- Panel Placement Tool ---
+  let placingPanel = false;
+  const placePanelBtn = document.getElementById('place-panel');
+  placePanelBtn.addEventListener('click', () => {
+    placingPanel = !placingPanel;
+    placePanelBtn.textContent = placingPanel ? 'Exit Panel Placement' : 'Place Panel';
+    renderer.domElement.style.cursor = placingPanel ? 'crosshair' : '';
+  });
+
+  // Raycaster for picking
+  const raycaster = new THREE.Raycaster();
+  renderer.domElement.addEventListener('pointerdown', (event) => {
+    if (!placingPanel) return;
+    // Get mouse position in normalized device coordinates
+    const rect = renderer.domElement.getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+    raycaster.setFromCamera(mouse, camera);
+    // Intersect with roof meshes only
+    const intersects = raycaster.intersectObjects(roofMeshes.map(r => r.mesh));
+    if (intersects.length > 0) {
+      const hit = intersects[0];
+      // Store panel position (on roof)
+      placedPanels.push({
+        position: hit.point.clone(),
+        roofIdx: roofMeshes.findIndex(r => r.mesh === hit.object)
+      });
+      // Visualize panel immediately
+      addPanelMesh(hit.point);
+    }
+  });
+
+  // Helper to add a panel mesh at a position
+  function addPanelMesh(pos) {
+    const panelGeom = new THREE.BoxGeometry(30, 20, 2); // 30x20cm, 2cm thick
+    const panelMat = new THREE.MeshPhongMaterial({ color: 0x00c3ff, emissive: 0x0077ff });
+    const panel = new THREE.Mesh(panelGeom, panelMat);
+    panel.position.copy(pos);
+    panel.position.z += 2; // slightly above roof
+    panel.castShadow = true;
+    panel.receiveShadow = true;
+    scene.add(panel);
+  }
+
+  // Render all previously placed panels (if any)
+  placedPanels.forEach(p => addPanelMesh(p.position));
 
   // --- Sun visualization ---
   // Sun sphere with emissive material for glow effect

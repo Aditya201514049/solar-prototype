@@ -52,6 +52,46 @@ fetch("https://overpass-api.de/api/interpreter", {
   });
 });
 
+fetch("https://overpass-api.de/api/interpreter", {
+  method: "POST",
+  body: query
+})
+.then(async res => {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error("Overpass API did not return valid JSON.\n\n" + text.slice(0, 200));
+  }
+})
+.then(data => {
+  // Use parseBuildings to get building objects with footprint/height
+  solarScene.buildings = parseBuildings(data);
+  draw2D(canvas, state);
+  initScene();
+
+  // Toggle logic
+  const btn = document.getElementById('toggle-view');
+  const canvas2d = document.getElementById('map');
+  const container3d = document.getElementById('threejs-container');
+  let is3D = false;
+  btn.addEventListener('click', () => {
+    is3D = !is3D;
+    if (is3D) {
+      canvas2d.style.display = 'none';
+      container3d.style.display = '';
+      btn.textContent = 'Switch to 2D View';
+    } else {
+      canvas2d.style.display = '';
+      container3d.style.display = 'none';
+      btn.textContent = 'Switch to 3D View';
+    }
+  });
+})
+.catch(err => {
+  alert("Failed to load OSM data from Overpass API.\n\n" + err.message);
+});
+
 // Zoom
 canvas.addEventListener("wheel", e => {
   e.preventDefault();
