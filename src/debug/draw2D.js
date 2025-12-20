@@ -13,23 +13,14 @@ export function draw2D(canvas, state) {
 
   solarScene.buildings.forEach(building => {
     ctx.beginPath();
-
-    building.nodeIds.forEach((nodeId, index) => {
-      const node = solarScene.nodes[nodeId];
-      if (!node) return;
-
-      const x =
-        (node.lon - solarScene.location.lon) * scale * zoom +
-        canvas.width / 2 + offsetX;
-
-      const y =
-        (solarScene.location.lat - node.lat) * scale * zoom +
-        canvas.height / 2 + offsetY;
-
+    // building.footprint is an array of [lon, lat]
+    building.footprint.forEach((pt, index) => {
+      const [lon, lat] = pt;
+      const x = (lon - solarScene.location.lon) * scale * zoom + canvas.width / 2 + offsetX;
+      const y = (solarScene.location.lat - lat) * scale * zoom + canvas.height / 2 + offsetY;
       if (index === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
-
     ctx.closePath();
     ctx.fillStyle = "#999";
     ctx.fill();

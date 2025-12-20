@@ -1,5 +1,7 @@
-import { parseOSM } from "./osm/parseOSM";
+import { parseBuildings } from "./data/osmParser";
 import { draw2D } from "./debug/draw2D";
+import { solarScene } from "./data/solarScene";
+import { initScene } from "./scene/initScene";
 
 const canvas = document.getElementById("map");
 
@@ -26,8 +28,10 @@ fetch("https://overpass-api.de/api/interpreter", {
 })
 .then(res => res.json())
 .then(data => {
-  parseOSM(data);
+  // Use parseBuildings to get building objects with footprint/height
+  solarScene.buildings = parseBuildings(data);
   draw2D(canvas, state);
+  initScene();
 });
 
 // Zoom
