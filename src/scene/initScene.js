@@ -5,8 +5,9 @@ import { latLonToMeters } from '../geo/latLonToMeters';
 import { getSunPosition } from '../solar/sunPosition';
 import { calcIrradiance } from '../solar/irradiance';
 
-// Store panel positions globally for now
+// Store panel positions and meshes globally for now
 const placedPanels = [];
+const panelMeshes = [];
 
 export function initScene() {
   // Create renderer
@@ -161,6 +162,45 @@ export function initScene() {
     panel.castShadow = true;
     panel.receiveShadow = true;
     scene.add(panel);
+    panelMeshes.push(panel);
+  }
+
+  // Remove panel on right-click (pointerdown, button 2)
+  renderer.domElement.addEventListener('pointerdown', (event) => {
+    if (event.button !== 2) return; // right mouse button only
+    event.preventDefault();
+    // Get mouse position in normalized device coordinates
+    const rect = renderer.domElement.getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+    raycaster.setFromCamera(mouse, camera);
+    // Intersect with panel meshes only
+    const intersects = raycaster.intersectObjects(panelMeshes);
+    if (intersects.length > 0) {
+      const hitPanel = intersects[0].object;
+      // Remove from scene
+      scene.remove(hitPanel);
+      // Remove from arrays
+      const idx = panelMeshes.indexOf(hitPanel);
+      if (idx !== -1) {
+        panelMeshes.splice(idx, 1);
+        placedPanels.splice(idx, 1);
+      }
+    }
+  });
+  // Prevent default context menu for robustness
+  renderer.domElement.addEventListener('contextmenu', (event) => event.preventDefault());
+
+  // Remove all panels when button is clicked
+  const removePanelsBtn = document.getElementById('remove-panels');
+  if (removePanelsBtn) {
+    removePanelsBtn.onclick = () => {
+      panelMeshes.forEach(panel => scene.remove(panel));
+      panelMeshes.length = 0;
+      placedPanels.length = 0;
+    };
   }
 
   // Render all previously placed panels (if any)
