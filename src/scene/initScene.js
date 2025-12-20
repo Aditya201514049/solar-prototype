@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { solarScene } from '../data/solarScene';
 import { latLonToMeters } from '../geo/latLonToMeters';
 import { getSunPosition } from '../solar/sunPosition';
+import { calcIrradiance } from '../solar/irradiance';
 
 export function initScene() {
   // Create renderer
@@ -71,7 +72,7 @@ export function initScene() {
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // Add buildings with shadow casting (extrude along Z)
+  // Add buildings with shadow casting (extrude along Z) and color roofs by irradiance
   solarScene.buildings.forEach(b => {
     const shape = new THREE.Shape();
     b.footprint.forEach(([lon, lat], i) => {
@@ -86,11 +87,24 @@ export function initScene() {
       depth: b.height,
       bevelEnabled: false
     });
-    // Place base at Z=0
     geometry.translate(0, 0, 0);
-    // Make buildings white for maximum visibility
-    const material = new THREE.MeshLambertMaterial({ color: 0xffffff });
-    const mesh = new THREE.Mesh(geometry, material);
+
+    // Calculate irradiance for a flat roof (normal = +Z)
+    const sunVec = new THREE.Vector3(sunX, sunY, sunZ).normalize();
+    const roofNormal = new THREE.Vector3(0, 0, 1);
+    const irr = calcIrradiance(sunVec, roofNormal); // 0..1
+
+    // Color: blue (low) to red (high)
+    const color = new THREE.Color().setHSL(0.67 - 0.67 * irr, 1, 0.5); // 0.67=blue, 0=red
+
+    // Multi-material: roof colored by irradiance, walls white
+    const materials = [
+      new THREE.MeshLambertMaterial({ color: 0xffffff }), // walls
+      new THREE.MeshLambertMaterial({ color }) // roof
+    ];
+    // Use groups created by ExtrudeGeometry: group 0 = walls, group 1 = roof
+    // (ExtrudeGeometry automatically creates these groups)
+    const mesh = new THREE.Mesh(geometry, materials);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     scene.add(mesh);
