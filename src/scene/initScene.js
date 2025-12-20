@@ -197,11 +197,18 @@ export function initScene() {
   // Remove all panels when button is clicked
   const removePanelsBtn = document.getElementById('remove-panels');
   if (removePanelsBtn) {
-    removePanelsBtn.onclick = () => {
-      panelMeshes.forEach(panel => scene.remove(panel));
+    removePanelsBtn.addEventListener('click', () => {
+      // Remove all panel meshes from the scene
+      panelMeshes.forEach(panel => {
+        scene.remove(panel);
+        // Dispose of geometry and material to free memory
+        panel.geometry.dispose();
+        panel.material.dispose();
+      });
+      // Clear the arrays
       panelMeshes.length = 0;
       placedPanels.length = 0;
-    };
+    });
   }
 
   // Render all previously placed panels (if any)
