@@ -49,11 +49,11 @@ fetch("https://overpass-api.de/api/interpreter", {
     is3D = !is3D;
     if (is3D) {
       canvas2d.style.display = 'none';
-      container3d.style.display = '';
+      container3d.style.display = 'block';
       btn.textContent = 'Switch to 2D View';
       btn.classList.add('active');
     } else {
-      canvas2d.style.display = '';
+      canvas2d.style.display = 'block';
       container3d.style.display = 'none';
       btn.textContent = 'Switch to 3D View';
       btn.classList.remove('active');
