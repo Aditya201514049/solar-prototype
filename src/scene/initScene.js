@@ -29,7 +29,45 @@ export function initScene() {
   // Controls
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0, 0);
+  controls.enablePan = true; // Enable panning
+  controls.panSpeed = 2.0; // Pan speed (higher = faster)
+  controls.enableDamping = true; // Smooth camera movement
+  controls.dampingFactor = 0.05;
+  
+  // Configure mouse buttons: left = rotate, middle = pan, right = (reserved for panel removal)
+  controls.mouseButtons = {
+    LEFT: THREE.MOUSE.ROTATE,
+    MIDDLE: THREE.MOUSE.PAN, // Middle mouse button for panning
+    RIGHT: null // Disable right mouse pan since we use it for panel removal
+  };
+  
   controls.update();
+
+  // Add keyboard arrow keys for panning (convenient when zoomed in)
+  const panSpeed = 50; // Pan distance per key press
+  const keys = {};
+  window.addEventListener('keydown', (event) => {
+    keys[event.code] = true;
+  });
+  window.addEventListener('keyup', (event) => {
+    keys[event.code] = false;
+  });
+
+  // Pan with arrow keys
+  function handleKeyboardPan() {
+    if (keys['ArrowLeft'] || keys['KeyA']) {
+      controls.pan(panSpeed, 0);
+    }
+    if (keys['ArrowRight'] || keys['KeyD']) {
+      controls.pan(-panSpeed, 0);
+    }
+    if (keys['ArrowUp'] || keys['KeyW']) {
+      controls.pan(0, -panSpeed);
+    }
+    if (keys['ArrowDown'] || keys['KeyS']) {
+      controls.pan(0, panSpeed);
+    }
+  }
 
   // Lighting
   const ambient = new THREE.AmbientLight(0xffffff, 0.5);
@@ -242,6 +280,8 @@ export function initScene() {
   // Render loop
   function animate() {
     requestAnimationFrame(animate);
+    handleKeyboardPan(); // Check for keyboard panning
+    controls.update(); // Update controls (for damping)
     renderer.render(scene, camera);
   }
   animate();
