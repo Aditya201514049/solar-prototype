@@ -12,6 +12,8 @@ const panelMeshes = [];
 export function initScene() {
   // Create renderer
   const container = document.getElementById('threejs-container');
+  // Clear container if it already has content (prevent duplicates)
+  container.innerHTML = '';
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(1300, 800);
   container.appendChild(renderer.domElement);
