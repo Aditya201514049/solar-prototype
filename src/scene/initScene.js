@@ -16,7 +16,7 @@ export function initScene() {
   // Clear container if it already has content (prevent duplicates)
   container.innerHTML = '';
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(1300, 800);
+  renderer.setSize(1400, 800);
   container.appendChild(renderer.domElement);
 
   // Create scene
