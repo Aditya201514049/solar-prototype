@@ -4,6 +4,7 @@ import { solarScene } from '../data/solarScene';
 import { latLonToMeters } from '../geo/latLonToMeters';
 import { getSunPosition } from '../solar/sunPosition';
 import { calcIrradiance } from '../solar/irradiance';
+import { panelConfig } from '../panels/panelConfig';
 
 // Store panel positions and meshes globally for now
 const placedPanels = [];
@@ -183,10 +184,16 @@ export function initScene() {
       const intersects = raycaster.intersectObjects(roofMeshes.map(r => r.mesh));
       if (intersects.length > 0) {
         const hit = intersects[0];
-        // Store panel position (on roof)
+        // Store panel position and configuration (on roof)
         placedPanels.push({
           position: hit.point.clone(),
-          roofIdx: roofMeshes.findIndex(r => r.mesh === hit.object)
+          roofIdx: roofMeshes.findIndex(r => r.mesh === hit.object),
+          config: {
+            width: panelConfig.width,
+            height: panelConfig.height,
+            thickness: panelConfig.thickness,
+            shape: panelConfig.shape
+          }
         });
         // Visualize panel immediately
         addPanelMesh(hit.point);
@@ -218,13 +225,38 @@ export function initScene() {
     }
   });
 
-  // Helper to add a panel mesh at a position
+  // Helper to add a panel mesh at a position with custom configuration
   function addPanelMesh(pos) {
-    const panelGeom = new THREE.BoxGeometry(30, 20, 2); // 30x20cm, 2cm thick
+    let panelGeom;
+    const width = panelConfig.width / 100; // Convert cm to meters
+    const height = panelConfig.height / 100; // Convert cm to meters
+    const thickness = panelConfig.thickness / 100; // Convert cm to meters
+    
+    // Create geometry based on shape
+    switch (panelConfig.shape) {
+      case 'square':
+        // Square: use the larger dimension
+        const size = Math.max(width, height);
+        panelGeom = new THREE.BoxGeometry(size, size, thickness);
+        break;
+      case 'circular':
+        // Circular: use cylinder with radius based on average dimension
+        const radius = Math.max(width, height) / 2;
+        panelGeom = new THREE.CylinderGeometry(radius, radius, thickness, 32);
+        // Rotate cylinder to lie flat (rotate 90 degrees around X-axis)
+        panelGeom.rotateX(Math.PI / 2);
+        break;
+      case 'rectangular':
+      default:
+        // Rectangular: standard box
+        panelGeom = new THREE.BoxGeometry(width, height, thickness);
+        break;
+    }
+    
     const panelMat = new THREE.MeshPhongMaterial({ color: 0x00c3ff, emissive: 0x0077ff });
     const panel = new THREE.Mesh(panelGeom, panelMat);
     panel.position.copy(pos);
-    panel.position.z += 2; // slightly above roof
+    panel.position.z += thickness / 2; // Position slightly above roof based on thickness
     panel.castShadow = true;
     panel.receiveShadow = true;
     scene.add(panel);
@@ -251,7 +283,65 @@ export function initScene() {
     });
   }
 
+  // Panel customization controls
+  const panelCustomization = document.getElementById('panel-customization');
+  const widthSlider = document.getElementById('panel-width');
+  const heightSlider = document.getElementById('panel-height');
+  const thicknessSlider = document.getElementById('panel-thickness');
+  const shapeSelect = document.getElementById('panel-shape');
+  const widthValue = document.getElementById('width-value');
+  const heightValue = document.getElementById('height-value');
+  const thicknessValue = document.getElementById('thickness-value');
+
+  if (widthSlider && heightSlider && thicknessSlider && shapeSelect) {
+    // Update panel configuration when sliders change
+    widthSlider.addEventListener('input', (e) => {
+      const value = parseInt(e.target.value);
+      panelConfig.width = value;
+      widthValue.textContent = value;
+      // For square shape, update height too
+      if (panelConfig.shape === 'square') {
+        panelConfig.height = value;
+        heightSlider.value = value;
+        heightValue.textContent = value;
+      }
+    });
+
+    heightSlider.addEventListener('input', (e) => {
+      const value = parseInt(e.target.value);
+      panelConfig.height = value;
+      heightValue.textContent = value;
+      // For square shape, update width too
+      if (panelConfig.shape === 'square') {
+        panelConfig.width = value;
+        widthSlider.value = value;
+        widthValue.textContent = value;
+      }
+    });
+
+    thicknessSlider.addEventListener('input', (e) => {
+      const value = parseInt(e.target.value);
+      panelConfig.thickness = value;
+      thicknessValue.textContent = value;
+    });
+
+    shapeSelect.addEventListener('change', (e) => {
+      panelConfig.setShape(e.target.value);
+      // Update UI to reflect square shape constraints
+      if (e.target.value === 'square') {
+        const size = Math.max(panelConfig.width, panelConfig.height);
+        panelConfig.width = size;
+        panelConfig.height = size;
+        widthSlider.value = size;
+        heightSlider.value = size;
+        widthValue.textContent = size;
+        heightValue.textContent = size;
+      }
+    });
+  }
+
   // Render all previously placed panels (if any)
+  // Note: Uses current panelConfig, not the original config when placed
   placedPanels.forEach(p => addPanelMesh(p.position));
 
   // --- Sun visualization ---

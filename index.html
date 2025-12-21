@@ -3,8 +3,52 @@
   <head>
     <title>OSM Buildings 2D</title>
     <style>
-      body { margin: 0; }
+      body { margin: 0; font-family: Arial, sans-serif; }
       canvas { background: #f5f5f5; display: block; }
+      .controls-panel {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        z-index: 1000;
+        min-width: 250px;
+      }
+      .controls-panel h3 {
+        margin: 0 0 10px 0;
+        font-size: 14px;
+        color: #333;
+      }
+      .control-group {
+        margin-bottom: 12px;
+      }
+      .control-group label {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 12px;
+        color: #666;
+      }
+      .control-group input, .control-group select {
+        width: 100%;
+        padding: 6px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 12px;
+        box-sizing: border-box;
+      }
+      .control-group input[type="range"] {
+        width: 70%;
+        display: inline-block;
+      }
+      .control-group .value-display {
+        display: inline-block;
+        width: 25%;
+        text-align: right;
+        font-size: 12px;
+        color: #333;
+      }
     </style>
   </head>
   <body>
@@ -14,6 +58,31 @@
       <button id="remove-panels" style="margin-bottom:10px; margin-left:10px;">Remove Panels</button>
       <canvas id="map" width="1300" height="800"></canvas>
       <div id="threejs-container" style="display:none;"></div>
+      
+      <!-- Panel Customization Panel -->
+      <div id="panel-customization" class="controls-panel" style="display:none;">
+        <h3>Panel Customization</h3>
+        <div class="control-group">
+          <label>Shape:</label>
+          <select id="panel-shape">
+            <option value="rectangular">Rectangular</option>
+            <option value="square">Square</option>
+            <option value="circular">Circular</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label>Width (cm): <span class="value-display" id="width-value">200</span></label>
+          <input type="range" id="panel-width" min="50" max="500" value="200" step="10">
+        </div>
+        <div class="control-group">
+          <label>Height (cm): <span class="value-display" id="height-value">100</span></label>
+          <input type="range" id="panel-height" min="50" max="500" value="100" step="10">
+        </div>
+        <div class="control-group">
+          <label>Thickness (cm): <span class="value-display" id="thickness-value">5</span></label>
+          <input type="range" id="panel-thickness" min="1" max="20" value="5" step="1">
+        </div>
+      </div>
 
     <script type="module" src="/src/main.js"></script>
   </body>
