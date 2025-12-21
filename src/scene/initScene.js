@@ -162,11 +162,14 @@ export function initScene() {
   // --- Panel Placement Tool ---
   let placingPanel = false;
   const placePanelBtn = document.getElementById('place-panel');
-  placePanelBtn.addEventListener('click', () => {
-    placingPanel = !placingPanel;
-    placePanelBtn.textContent = placingPanel ? 'Exit Panel Placement' : 'Place Panel';
-    renderer.domElement.style.cursor = placingPanel ? 'crosshair' : '';
-  });
+  if (placePanelBtn) {
+    placePanelBtn.addEventListener('click', () => {
+      placingPanel = !placingPanel;
+      placePanelBtn.textContent = placingPanel ? 'Exit Panel Placement' : 'Place Panel';
+      placePanelBtn.classList.toggle('active', placingPanel);
+      renderer.domElement.style.cursor = placingPanel ? 'crosshair' : '';
+    });
+  }
 
   // Raycaster for picking
   const raycaster = new THREE.Raycaster();
@@ -283,8 +286,10 @@ export function initScene() {
     });
   }
 
-  // Panel customization controls
-  const panelCustomization = document.getElementById('panel-customization');
+  // Panel customization modal controls
+  const panelModal = document.getElementById('panel-customization-modal');
+  const panelSettingsBtn = document.getElementById('panel-settings');
+  const closeModalBtn = document.getElementById('close-modal');
   const widthSlider = document.getElementById('panel-width');
   const heightSlider = document.getElementById('panel-height');
   const thicknessSlider = document.getElementById('panel-thickness');
@@ -292,6 +297,36 @@ export function initScene() {
   const widthValue = document.getElementById('width-value');
   const heightValue = document.getElementById('height-value');
   const thicknessValue = document.getElementById('thickness-value');
+
+  // Open modal
+  if (panelSettingsBtn && panelModal) {
+    panelSettingsBtn.addEventListener('click', () => {
+      panelModal.classList.add('active');
+    });
+  }
+
+  // Close modal
+  if (closeModalBtn && panelModal) {
+    closeModalBtn.addEventListener('click', () => {
+      panelModal.classList.remove('active');
+    });
+  }
+
+  // Close modal when clicking outside of it
+  if (panelModal) {
+    panelModal.addEventListener('click', (e) => {
+      if (e.target === panelModal) {
+        panelModal.classList.remove('active');
+      }
+    });
+
+    // Close modal with Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && panelModal.classList.contains('active')) {
+        panelModal.classList.remove('active');
+      }
+    });
+  }
 
   if (widthSlider && heightSlider && thicknessSlider && shapeSelect) {
     // Update panel configuration when sliders change

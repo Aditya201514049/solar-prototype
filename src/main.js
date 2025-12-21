@@ -44,20 +44,19 @@ fetch("https://overpass-api.de/api/interpreter", {
   const btn = document.getElementById('toggle-view');
   const canvas2d = document.getElementById('map');
   const container3d = document.getElementById('threejs-container');
-  const panelCustomization = document.getElementById('panel-customization');
   let is3D = false;
   btn.addEventListener('click', () => {
     is3D = !is3D;
     if (is3D) {
       canvas2d.style.display = 'none';
       container3d.style.display = '';
-      if (panelCustomization) panelCustomization.style.display = 'block';
       btn.textContent = 'Switch to 2D View';
+      btn.classList.add('active');
     } else {
       canvas2d.style.display = '';
       container3d.style.display = 'none';
-      if (panelCustomization) panelCustomization.style.display = 'none';
       btn.textContent = 'Switch to 3D View';
+      btn.classList.remove('active');
     }
   });
 })
