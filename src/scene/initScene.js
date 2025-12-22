@@ -3,12 +3,10 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { solarScene } from '../data/solarScene';
 import { latLonToMeters } from '../geo/latLonToMeters';
 import { getSunPosition } from '../solar/sunPosition';
-import { calcIrradiance } from '../solar/irradiance';
+import { createGround } from './ground';
+import { addBuildings3D } from './addBuildings3D';
+import { setupPanelPlacement } from '../panels/placement';
 import { panelConfig } from '../panels/panelConfig';
-
-// Store panel positions and meshes globally for now
-const placedPanels = [];
-const panelMeshes = [];
 
 export function initScene() {
   // Create renderer
@@ -108,183 +106,17 @@ export function initScene() {
   // Convert OSM footprints to meters, center at (0,0)
   const center = latLonToMeters(solarScene.location.lat, solarScene.location.lon);
 
-  // Add a ground plane to receive shadows (X-Y plane, Z=0)
-  const groundGeo = new THREE.PlaneGeometry(3000, 3000);
-  // Use a light blue color for the ground for better contrast
-  const groundMat = new THREE.MeshPhongMaterial({ color: 0xb3d1ff, side: THREE.DoubleSide });
-  const ground = new THREE.Mesh(groundGeo, groundMat);
-  ground.position.set(0, 0, 0);
-  ground.receiveShadow = true;
-  scene.add(ground);
+  // Add ground plane
+  createGround(scene);
 
-  // Add buildings with shadow casting (extrude along Z) and color roofs by irradiance
-  // Also keep a reference to each roof mesh for picking
-  const roofMeshes = [];
-  solarScene.buildings.forEach((b, idx) => {
-    const shape = new THREE.Shape();
-    b.footprint.forEach(([lon, lat], i) => {
-      const [x, y] = latLonToMeters(lat, lon);
-      const px = x - center[0];
-      const py = y - center[1];
-      if (i === 0) shape.moveTo(px, py);
-      else shape.lineTo(px, py);
-    });
-    // Extrude along Z (height)
-    const geometry = new THREE.ExtrudeGeometry(shape, {
-      depth: b.height,
-      bevelEnabled: false
-    });
-    geometry.translate(0, 0, 0);
+  // Calculate normalized sun vector for building irradiance
+  const sunVec = new THREE.Vector3(sunX, sunY, sunZ).normalize();
 
-    // Calculate irradiance for a flat roof (normal = +Z)
-    const sunVec = new THREE.Vector3(sunX, sunY, sunZ).normalize();
-    const roofNormal = new THREE.Vector3(0, 0, 1);
-    const irr = calcIrradiance(sunVec, roofNormal); // 0..1
+  // Add buildings with shadow casting and irradiance-colored roofs
+  const roofMeshes = addBuildings3D(scene, center, sunVec);
 
-    // Color: blue (low) to red (high)
-    const color = new THREE.Color().setHSL(0.67 - 0.67 * irr, 1, 0.5); // 0.67=blue, 0=red
-
-    // Multi-material: roof colored by irradiance, walls white
-    const materials = [
-      new THREE.MeshLambertMaterial({ color: 0xffffff }), // walls
-      new THREE.MeshLambertMaterial({ color }) // roof
-    ];
-    // Use groups created by ExtrudeGeometry: group 0 = walls, group 1 = roof
-    const mesh = new THREE.Mesh(geometry, materials);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    scene.add(mesh);
-
-    // Store for picking
-    roofMeshes.push({ mesh, building: b, shape, idx });
-  });
-
-  // --- Panel Placement Tool ---
-  let placingPanel = false;
-  const placePanelBtn = document.getElementById('place-panel');
-  if (placePanelBtn) {
-    placePanelBtn.addEventListener('click', () => {
-      placingPanel = !placingPanel;
-      placePanelBtn.textContent = placingPanel ? 'Exit Panel Placement' : 'Place Panel';
-      placePanelBtn.classList.toggle('active', placingPanel);
-      renderer.domElement.style.cursor = placingPanel ? 'crosshair' : '';
-    });
-  }
-
-  // Raycaster for picking
-  const raycaster = new THREE.Raycaster();
-  renderer.domElement.addEventListener('pointerdown', (event) => {
-    // Left-click (button 0): Add panel (only in placement mode)
-    if (event.button === 0 && placingPanel) {
-      // Get mouse position in normalized device coordinates
-      const rect = renderer.domElement.getBoundingClientRect();
-      const mouse = new THREE.Vector2(
-        ((event.clientX - rect.left) / rect.width) * 2 - 1,
-        -((event.clientY - rect.top) / rect.height) * 2 + 1
-      );
-      raycaster.setFromCamera(mouse, camera);
-      // Intersect with roof meshes only
-      const intersects = raycaster.intersectObjects(roofMeshes.map(r => r.mesh));
-      if (intersects.length > 0) {
-        const hit = intersects[0];
-        // Store panel position and configuration (on roof)
-        placedPanels.push({
-          position: hit.point.clone(),
-          roofIdx: roofMeshes.findIndex(r => r.mesh === hit.object),
-          config: {
-            width: panelConfig.width,
-            height: panelConfig.height,
-            thickness: panelConfig.thickness,
-            shape: panelConfig.shape
-          }
-        });
-        // Visualize panel immediately
-        addPanelMesh(hit.point);
-      }
-    }
-
-    // Right-click (button 2): Remove panel (always available)
-    if (event.button === 2) {
-      event.preventDefault();
-      const rect = renderer.domElement.getBoundingClientRect();
-      const mouse = new THREE.Vector2(
-        ((event.clientX - rect.left) / rect.width) * 2 - 1,
-        -((event.clientY - rect.top) / rect.height) * 2 + 1
-      );
-      raycaster.setFromCamera(mouse, camera);
-      // Intersect with panel meshes only
-      const intersects = raycaster.intersectObjects(panelMeshes);
-      if (intersects.length > 0) {
-        const hitPanel = intersects[0].object;
-        // Remove from scene
-        scene.remove(hitPanel);
-        // Remove from arrays
-        const idx = panelMeshes.indexOf(hitPanel);
-        if (idx !== -1) {
-          panelMeshes.splice(idx, 1);
-          placedPanels.splice(idx, 1);
-        }
-      }
-    }
-  });
-
-  // Helper to add a panel mesh at a position with custom configuration
-  function addPanelMesh(pos) {
-    let panelGeom;
-    const width = panelConfig.width / 100; // Convert cm to meters
-    const height = panelConfig.height / 100; // Convert cm to meters
-    const thickness = panelConfig.thickness / 100; // Convert cm to meters
-    
-    // Create geometry based on shape
-    switch (panelConfig.shape) {
-      case 'square':
-        // Square: use the larger dimension
-        const size = Math.max(width, height);
-        panelGeom = new THREE.BoxGeometry(size, size, thickness);
-        break;
-      case 'circular':
-        // Circular: use cylinder with radius based on average dimension
-        const radius = Math.max(width, height) / 2;
-        panelGeom = new THREE.CylinderGeometry(radius, radius, thickness, 32);
-        // Rotate cylinder to lie flat (rotate 90 degrees around X-axis)
-        panelGeom.rotateX(Math.PI / 2);
-        break;
-      case 'rectangular':
-      default:
-        // Rectangular: standard box
-        panelGeom = new THREE.BoxGeometry(width, height, thickness);
-        break;
-    }
-    
-    const panelMat = new THREE.MeshPhongMaterial({ color: 0x00c3ff, emissive: 0x0077ff });
-    const panel = new THREE.Mesh(panelGeom, panelMat);
-    panel.position.copy(pos);
-    panel.position.z += thickness / 2; // Position slightly above roof based on thickness
-    panel.castShadow = true;
-    panel.receiveShadow = true;
-    scene.add(panel);
-    panelMeshes.push(panel);
-  }
-
-  // Remove panel on right-click (pointerdown, button 2)
-  // (Already handled above in the unified pointerdown listener)
-
-  // Remove all panels when button is clicked
-  const removePanelsBtn = document.getElementById('remove-panels');
-  if (removePanelsBtn) {
-    removePanelsBtn.addEventListener('click', () => {
-      // Remove all panel meshes from the scene
-      panelMeshes.forEach(panel => {
-        scene.remove(panel);
-        // Dispose of geometry and material to free memory
-        panel.geometry.dispose();
-        panel.material.dispose();
-      });
-      // Clear the arrays
-      panelMeshes.length = 0;
-      placedPanels.length = 0;
-    });
-  }
+  // Setup panel placement system
+  const panelSystem = setupPanelPlacement(scene, camera, renderer, roofMeshes);
 
   // Panel customization modal controls
   const panelModal = document.getElementById('panel-customization-modal');
@@ -375,9 +207,8 @@ export function initScene() {
     });
   }
 
-  // Render all previously placed panels (if any)
-  // Note: Uses current panelConfig, not the original config when placed
-  placedPanels.forEach(p => addPanelMesh(p.position));
+  // Restore previously placed panels (if any)
+  panelSystem.restorePanels();
 
   // --- Sun visualization ---
   // Sun sphere with emissive material for glow effect
