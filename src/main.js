@@ -3,6 +3,7 @@ import { draw2D } from "./debug/draw2D";
 import { solarScene } from "./data/solarScene";
 import { initScene } from "./scene/initScene";
 import { buildOverpassQuery } from "./osm/overpassQuery";
+import { fetchOSM } from "./osm/fetchOSM";
 
 const canvas = document.getElementById("map");
 
@@ -15,18 +16,8 @@ const state = {
 // Generate Overpass query for Dhaka, Bangladesh
 const query = buildOverpassQuery(23.7800, 90.4000, 23.7820, 90.4020);
 
-fetch("https://overpass-api.de/api/interpreter", {
-  method: "POST",
-  body: query
-})
-.then(async res => {
-  const text = await res.text();
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    throw new Error("Overpass API did not return valid JSON.\n\n" + text.slice(0, 200));
-  }
-})
+// Fetch OSM data
+fetchOSM(query)
 .then(data => {
   // Use parseBuildings to get building objects with footprint/height
   solarScene.buildings = parseBuildings(data);
@@ -54,7 +45,7 @@ fetch("https://overpass-api.de/api/interpreter", {
   });
 })
 .catch(err => {
-  alert("Failed to load OSM data from Overpass API.\n\n" + err.message);
+  alert(`Failed to load OSM data from Overpass API.\n\n${err.message}`);
 });
 
 // Zoom
