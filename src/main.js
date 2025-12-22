@@ -2,6 +2,7 @@ import { parseBuildings } from "./data/osmParser";
 import { draw2D } from "./debug/draw2D";
 import { solarScene } from "./data/solarScene";
 import { initScene } from "./scene/initScene";
+import { buildOverpassQuery } from "./osm/overpassQuery";
 
 const canvas = document.getElementById("map");
 
@@ -11,16 +12,8 @@ const state = {
   offsetY: 0
 };
 
-// Overpass query (UNCHANGED)
-const query = `
-[out:json];
-(
-  way["building"](23.7800,90.4000,23.7820,90.4020);
-);
-out body;
->;
-out skel qt;
-`;
+// Generate Overpass query for Dhaka, Bangladesh
+const query = buildOverpassQuery(23.7800, 90.4000, 23.7820, 90.4020);
 
 fetch("https://overpass-api.de/api/interpreter", {
   method: "POST",
