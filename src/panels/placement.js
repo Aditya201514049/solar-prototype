@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { panelConfig } from './panelConfig';
 import { createPanelMesh } from './panelModel';
 import { calcPanelIrradiance, calcIrradiance } from '../solar/irradiance';
+import { calculatePanelShadowFactor } from '../solar/shadowAnalysis';
 
 /**
  * Sets up panel placement system with raycasting and event handlers
@@ -16,6 +17,9 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
   const placedPanels = [];
   const panelMeshes = [];
   let placingPanel = false;
+  
+  // Store panel-to-roof mapping for shadow analysis
+  const panelToRoofMap = new Map();
 
   // Helper to add a panel mesh to the scene with irradiance-based coloring
   function addPanelToScene(position, config = null) {
@@ -35,46 +39,64 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
       worldNormal.normalize();
       
       // Use the world-space normal for irradiance calculation
-      const irradiance = calcIrradiance(sunVec, worldNormal);
+      let irradiance = calcIrradiance(sunVec, worldNormal);
       
-      // Debug: log irradiance for all panels (with color info)
-      console.log(`Panel ${panelMeshes.length + 1}: Tilt=${panel.userData.tilt}° Azimuth=${panel.userData.azimuth}° → Irradiance=${irradiance.toFixed(3)} (${irradiance < 0.3 ? 'BLUE' : irradiance < 0.6 ? 'GREEN/CYAN' : irradiance < 0.85 ? 'YELLOW' : 'RED/ORANGE'})`);
+      // Phase 3: Shadow Analysis - Check if panel is blocked by buildings
+      // Get the roof this panel is on (to exclude it from shadow checks)
+      const panelRoof = panel.userData.roofMesh;
+      const shadowFactor = calculatePanelShadowFactor(panel, sunVec, roofMeshes, 4, panelRoof);
+      irradiance *= shadowFactor; // Reduce irradiance if in shadow
+      
+      // Store shadow info for debugging
+      panel.userData.shadowFactor = shadowFactor;
+      panel.userData.inShadow = shadowFactor < 0.5; // Consider shadowed if more than 50% blocked
+      
+      // Debug: log irradiance for all panels (with color and shadow info)
+      const shadowStatus = shadowFactor < 0.5 ? 'SHADOWED' : shadowFactor < 1 ? 'PARTIAL' : 'CLEAR';
+      console.log(`Panel ${panelMeshes.length + 1}: Tilt=${panel.userData.tilt}° Azimuth=${panel.userData.azimuth}° → Irradiance=${irradiance.toFixed(3)} Shadow=${shadowFactor.toFixed(2)} (${shadowStatus})`);
       
       // Also store in userData for reference
       panel.userData.irradiance = irradiance;
       panel.userData.worldNormal = worldNormal; // Store for later use
       
-      // Color panel based on irradiance
+      // Color panel based on irradiance (now includes shadow effects)
       // Optimized for low sun elevation: More variation in lower ranges
-      // Blue (low) -> Cyan -> Green -> Yellow -> Orange -> Red (high)
+      // Blue (low/shadowed) -> Cyan -> Green -> Yellow -> Orange -> Red (high)
       let color;
       if (irradiance < 0.1) {
-        // Very low: dark blue
-        color = new THREE.Color().setHSL(0.6, 1, 0.25);
+        // Very low or fully shadowed: dark blue/purple
+        color = new THREE.Color().setHSL(0.6, 1, 0.2);
       } else if (irradiance < 0.25) {
         // Low: blue to cyan (more variation here)
         const t = (irradiance - 0.1) / 0.15;
-        color = new THREE.Color().setHSL(0.6 - t * 0.2, 1, 0.25 + t * 0.25);
+        color = new THREE.Color().setHSL(0.6 - t * 0.2, 1, 0.2 + t * 0.25);
       } else if (irradiance < 0.4) {
         // Medium-low: cyan to green
         const t = (irradiance - 0.25) / 0.15;
-        color = new THREE.Color().setHSL(0.4 - t * 0.15, 1, 0.5 + t * 0.15);
+        color = new THREE.Color().setHSL(0.4 - t * 0.15, 1, 0.45 + t * 0.15);
       } else if (irradiance < 0.55) {
         // Medium: green to yellow-green
         const t = (irradiance - 0.4) / 0.15;
-        color = new THREE.Color().setHSL(0.25 - t * 0.1, 1, 0.65 + t * 0.1);
+        color = new THREE.Color().setHSL(0.25 - t * 0.1, 1, 0.6 + t * 0.1);
       } else if (irradiance < 0.7) {
         // Medium-high: yellow-green to yellow
         const t = (irradiance - 0.55) / 0.15;
-        color = new THREE.Color().setHSL(0.15 - t * 0.05, 1, 0.75 + t * 0.05);
+        color = new THREE.Color().setHSL(0.15 - t * 0.05, 1, 0.7 + t * 0.05);
       } else if (irradiance < 0.85) {
         // High: yellow to orange
         const t = (irradiance - 0.7) / 0.15;
-        color = new THREE.Color().setHSL(0.1 - t * 0.05, 1, 0.8 - t * 0.1);
+        color = new THREE.Color().setHSL(0.1 - t * 0.05, 1, 0.75 - t * 0.1);
       } else {
         // Very high: orange to red
         const t = (irradiance - 0.85) / 0.15;
-        color = new THREE.Color().setHSL(0.05 - t * 0.05, 1, 0.7 - t * 0.2);
+        color = new THREE.Color().setHSL(0.05 - t * 0.05, 1, 0.65 - t * 0.2);
+      }
+      
+      // Darken color if panel is significantly shadowed (visual feedback)
+      if (shadowFactor < 0.5) {
+        color.multiplyScalar(0.6); // Make shadowed panels noticeably darker
+      } else if (shadowFactor < 1.0) {
+        color.multiplyScalar(0.8 + shadowFactor * 0.2); // Partial shadow
       }
       
       // Update panel material color based on irradiance
@@ -98,30 +120,46 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
       worldNormal.transformDirection(panel.matrixWorld);
       worldNormal.normalize();
       
-      const irradiance = calcIrradiance(newSunVec, worldNormal);
+      let irradiance = calcIrradiance(newSunVec, worldNormal);
+      
+      // Phase 3: Recalculate shadow factor with new sun position
+      const panelRoof = panel.userData.roofMesh;
+      const shadowFactor = calculatePanelShadowFactor(panel, newSunVec, roofMeshes, 4, panelRoof);
+      irradiance *= shadowFactor;
+      
+      // Update shadow info
+      panel.userData.shadowFactor = shadowFactor;
+      panel.userData.inShadow = shadowFactor < 0.5;
       
       // Use same color gradient as addPanelToScene
       let color;
       if (irradiance < 0.1) {
-        color = new THREE.Color().setHSL(0.6, 1, 0.25);
+        color = new THREE.Color().setHSL(0.6, 1, 0.2);
       } else if (irradiance < 0.25) {
         const t = (irradiance - 0.1) / 0.15;
-        color = new THREE.Color().setHSL(0.6 - t * 0.2, 1, 0.25 + t * 0.25);
+        color = new THREE.Color().setHSL(0.6 - t * 0.2, 1, 0.2 + t * 0.25);
       } else if (irradiance < 0.4) {
         const t = (irradiance - 0.25) / 0.15;
-        color = new THREE.Color().setHSL(0.4 - t * 0.15, 1, 0.5 + t * 0.15);
+        color = new THREE.Color().setHSL(0.4 - t * 0.15, 1, 0.45 + t * 0.15);
       } else if (irradiance < 0.55) {
         const t = (irradiance - 0.4) / 0.15;
-        color = new THREE.Color().setHSL(0.25 - t * 0.1, 1, 0.65 + t * 0.1);
+        color = new THREE.Color().setHSL(0.25 - t * 0.1, 1, 0.6 + t * 0.1);
       } else if (irradiance < 0.7) {
         const t = (irradiance - 0.55) / 0.15;
-        color = new THREE.Color().setHSL(0.15 - t * 0.05, 1, 0.75 + t * 0.05);
+        color = new THREE.Color().setHSL(0.15 - t * 0.05, 1, 0.7 + t * 0.05);
       } else if (irradiance < 0.85) {
         const t = (irradiance - 0.7) / 0.15;
-        color = new THREE.Color().setHSL(0.1 - t * 0.05, 1, 0.8 - t * 0.1);
+        color = new THREE.Color().setHSL(0.1 - t * 0.05, 1, 0.75 - t * 0.1);
       } else {
         const t = (irradiance - 0.85) / 0.15;
-        color = new THREE.Color().setHSL(0.05 - t * 0.05, 1, 0.7 - t * 0.2);
+        color = new THREE.Color().setHSL(0.05 - t * 0.05, 1, 0.65 - t * 0.2);
+      }
+      
+      // Darken if shadowed
+      if (shadowFactor < 0.5) {
+        color.multiplyScalar(0.6);
+      } else if (shadowFactor < 1.0) {
+        color.multiplyScalar(0.8 + shadowFactor * 0.2);
       }
       
       panel.material.color.copy(color);
@@ -169,15 +207,22 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
           azimuth: panelConfig.azimuth !== undefined ? panelConfig.azimuth : 180
         };
         
-        // Store panel position and configuration
+        const roofIdx = roofMeshes.findIndex(r => r.mesh === hit.object);
+        const roofMesh = roofMeshes[roofIdx].mesh;
+        
+        // Store panel position and configuration (including roof index for restoration)
         placedPanels.push({
           position: hit.point.clone(),
-          roofIdx: roofMeshes.findIndex(r => r.mesh === hit.object),
+          roofIdx: roofIdx,
           config
         });
         
         // Visualize panel immediately with current configuration
-        addPanelToScene(hit.point, config);
+        const panel = addPanelToScene(hit.point, config);
+        // Store reference to roof for shadow analysis (exclude this roof from shadow checks)
+        if (panel) {
+          panel.userData.roofMesh = roofMesh;
+        }
       }
     }
 
@@ -230,7 +275,11 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
   // Function to restore previously placed panels
   function restorePanels() {
     placedPanels.forEach(p => {
-      addPanelToScene(p.position, p.config);
+      const panel = addPanelToScene(p.position, p.config);
+      // Restore roof reference if available
+      if (panel && p.roofIdx !== undefined && roofMeshes[p.roofIdx]) {
+        panel.userData.roofMesh = roofMeshes[p.roofIdx].mesh;
+      }
     });
   }
 
