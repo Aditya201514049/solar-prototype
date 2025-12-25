@@ -125,10 +125,14 @@ export function initScene() {
   const widthSlider = document.getElementById('panel-width');
   const heightSlider = document.getElementById('panel-height');
   const thicknessSlider = document.getElementById('panel-thickness');
+  const tiltSlider = document.getElementById('panel-tilt');
+  const azimuthSlider = document.getElementById('panel-azimuth');
   const shapeSelect = document.getElementById('panel-shape');
   const widthValue = document.getElementById('width-value');
   const heightValue = document.getElementById('height-value');
   const thicknessValue = document.getElementById('thickness-value');
+  const tiltValue = document.getElementById('tilt-value');
+  const azimuthValue = document.getElementById('azimuth-value');
 
   // Open modal
   if (panelSettingsBtn && panelModal) {
@@ -160,7 +164,7 @@ export function initScene() {
     });
   }
 
-  if (widthSlider && heightSlider && thicknessSlider && shapeSelect) {
+  if (widthSlider && heightSlider && thicknessSlider && tiltSlider && azimuthSlider && shapeSelect) {
     // Update panel configuration when sliders change
     widthSlider.addEventListener('input', (e) => {
       const value = parseInt(e.target.value);
@@ -190,6 +194,18 @@ export function initScene() {
       const value = parseInt(e.target.value);
       panelConfig.thickness = value;
       thicknessValue.textContent = value;
+    });
+
+    tiltSlider.addEventListener('input', (e) => {
+      const value = parseInt(e.target.value);
+      panelConfig.tilt = value;
+      tiltValue.textContent = value;
+    });
+
+    azimuthSlider.addEventListener('input', (e) => {
+      const value = parseInt(e.target.value);
+      panelConfig.azimuth = value;
+      azimuthValue.textContent = value;
     });
 
     shapeSelect.addEventListener('change', (e) => {

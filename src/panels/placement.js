@@ -57,7 +57,9 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes) {
           width: panelConfig.width,
           height: panelConfig.height,
           thickness: panelConfig.thickness,
-          shape: panelConfig.shape
+          shape: panelConfig.shape,
+          tilt: panelConfig.tilt || 0,
+          azimuth: panelConfig.azimuth !== undefined ? panelConfig.azimuth : 180
         };
         
         // Store panel position and configuration

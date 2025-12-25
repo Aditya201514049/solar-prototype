@@ -4,6 +4,8 @@ export const panelConfig = {
   height: 100,     // cm (default: 100cm = 1m)
   thickness: 5,    // cm (default: 5cm)
   shape: 'rectangular', // 'rectangular', 'square', 'circular'
+  tilt: 0,         // degrees (0 = flat/horizontal, 90 = vertical)
+  azimuth: 180,    // degrees (0 = North, 90 = East, 180 = South, 270 = West)
   
   // Update configuration
   setSize(width, height, thickness) {
@@ -20,6 +22,11 @@ export const panelConfig = {
       this.width = size;
       this.height = size;
     }
+  },
+  
+  setOrientation(tilt, azimuth) {
+    this.tilt = tilt;
+    this.azimuth = azimuth;
   }
 };
 

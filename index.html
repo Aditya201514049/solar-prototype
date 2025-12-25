@@ -52,6 +52,22 @@
             </label>
             <input type="range" id="panel-thickness" min="1" max="20" value="5" step="1">
           </div>
+          <div class="control-group">
+            <label>
+              Tilt (degrees): 
+              <span class="value-display" id="tilt-value">0</span>
+            </label>
+            <input type="range" id="panel-tilt" min="0" max="90" value="0" step="1">
+            <small style="display: block; color: #999; margin-top: 4px; font-size: 11px;">0° = flat, 90° = vertical</small>
+          </div>
+          <div class="control-group">
+            <label>
+              Azimuth (degrees): 
+              <span class="value-display" id="azimuth-value">180</span>
+            </label>
+            <input type="range" id="panel-azimuth" min="0" max="360" value="180" step="1">
+            <small style="display: block; color: #999; margin-top: 4px; font-size: 11px;">0° = North, 90° = East, 180° = South, 270° = West</small>
+          </div>
         </div>
       </div>
 
