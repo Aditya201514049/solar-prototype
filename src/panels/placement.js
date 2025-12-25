@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { panelConfig } from './panelConfig';
 import { createPanelMesh } from './panelModel';
+import { calcPanelIrradiance } from '../solar/irradiance';
 
 /**
  * Sets up panel placement system with raycasting and event handlers
@@ -8,19 +9,83 @@ import { createPanelMesh } from './panelModel';
  * @param {THREE.Camera} camera - Three.js camera
  * @param {THREE.WebGLRenderer} renderer - Three.js renderer
  * @param {Array} roofMeshes - Array of roof mesh objects for picking
+ * @param {THREE.Vector3} sunVec - Normalized sun direction vector for irradiance calculations
  * @returns {Object} Object containing panel arrays and control functions
  */
-export function setupPanelPlacement(scene, camera, renderer, roofMeshes) {
+export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec) {
   const placedPanels = [];
   const panelMeshes = [];
   let placingPanel = false;
 
-  // Helper to add a panel mesh to the scene
+  // Helper to add a panel mesh to the scene with irradiance-based coloring
   function addPanelToScene(position, config = null) {
     const panel = createPanelMesh(position, config);
+    
+    // Calculate irradiance for this panel
+    if (sunVec) {
+      const irradiance = calcPanelIrradiance(panel, sunVec);
+      
+      // Color panel based on irradiance
+      // Blue (low) to Yellow/Green (medium) to Red (high)
+      // Use a gradient: blue (0) -> cyan -> yellow -> red (1)
+      let color;
+      if (irradiance < 0.1) {
+        // Very low: dark blue
+        color = new THREE.Color().setHSL(0.6, 1, 0.3);
+      } else if (irradiance < 0.5) {
+        // Low to medium: blue to cyan
+        const t = (irradiance - 0.1) / 0.4;
+        color = new THREE.Color().setHSL(0.6 - t * 0.2, 1, 0.3 + t * 0.3);
+      } else if (irradiance < 0.8) {
+        // Medium to high: cyan to yellow
+        const t = (irradiance - 0.5) / 0.3;
+        color = new THREE.Color().setHSL(0.4 - t * 0.2, 1, 0.6 + t * 0.2);
+      } else {
+        // High: yellow to red
+        const t = (irradiance - 0.8) / 0.2;
+        color = new THREE.Color().setHSL(0.2 - t * 0.2, 1, 0.8 - t * 0.3);
+      }
+      
+      // Update panel material color based on irradiance
+      panel.material.color.copy(color);
+      // Keep some emissive glow but reduce it for low irradiance
+      panel.material.emissive.set(color).multiplyScalar(0.3 * irradiance);
+      
+      // Store irradiance value in userData for later use
+      panel.userData.irradiance = irradiance;
+    }
+    
     scene.add(panel);
     panelMeshes.push(panel);
     return panel;
+  }
+  
+  // Function to update all panel colors based on current sun position
+  function updatePanelIrradiance(newSunVec) {
+    panelMeshes.forEach(panel => {
+      if (panel.userData.normal) {
+        const irradiance = calcPanelIrradiance(panel, newSunVec);
+        
+        // Update color based on new irradiance
+        let color;
+        if (irradiance < 0.1) {
+          color = new THREE.Color().setHSL(0.6, 1, 0.3);
+        } else if (irradiance < 0.5) {
+          const t = (irradiance - 0.1) / 0.4;
+          color = new THREE.Color().setHSL(0.6 - t * 0.2, 1, 0.3 + t * 0.3);
+        } else if (irradiance < 0.8) {
+          const t = (irradiance - 0.5) / 0.3;
+          color = new THREE.Color().setHSL(0.4 - t * 0.2, 1, 0.6 + t * 0.2);
+        } else {
+          const t = (irradiance - 0.8) / 0.2;
+          color = new THREE.Color().setHSL(0.2 - t * 0.2, 1, 0.8 - t * 0.3);
+        }
+        
+        panel.material.color.copy(color);
+        panel.material.emissive.set(color).multiplyScalar(0.3 * irradiance);
+        panel.userData.irradiance = irradiance;
+      }
+    });
   }
 
   // Panel placement button handler
@@ -131,7 +196,8 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes) {
     placedPanels,
     panelMeshes,
     restorePanels,
-    addPanelToScene
+    addPanelToScene,
+    updatePanelIrradiance
   };
 }
 

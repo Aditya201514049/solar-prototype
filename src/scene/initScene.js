@@ -109,14 +109,16 @@ export function initScene() {
   // Add ground plane
   createGround(scene);
 
-  // Calculate normalized sun vector for building irradiance
-  const sunVec = new THREE.Vector3(sunX, sunY, sunZ).normalize();
+  // Calculate normalized sun direction vector (FROM sun TO surface)
+  // For irradiance, we need direction FROM sun TO surface
+  // Since sun is at (sunX, sunY, sunZ), direction to origin is negative normalized position
+  const sunVec = new THREE.Vector3(-sunX, -sunY, -sunZ).normalize();
 
   // Add buildings with shadow casting and irradiance-colored roofs
   const roofMeshes = addBuildings3D(scene, center, sunVec);
 
-  // Setup panel placement system
-  const panelSystem = setupPanelPlacement(scene, camera, renderer, roofMeshes);
+  // Setup panel placement system (pass sunVec for irradiance calculations)
+  const panelSystem = setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec);
 
   // Panel customization modal controls
   const panelModal = document.getElementById('panel-customization-modal');
