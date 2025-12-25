@@ -41,6 +41,15 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
       // Use the world-space normal for irradiance calculation
       let irradiance = calcIrradiance(sunVec, worldNormal);
       
+      // Debug: log normal and dot product for tilted panels
+      if (panel.userData.tilt > 0 && panelMeshes.length < 5) {
+        const dot = sunVec.dot(worldNormal);
+        console.log(`  Panel ${panelMeshes.length + 1} Debug: Tilt=${panel.userData.tilt}° Azimuth=${panel.userData.azimuth}°`);
+        console.log(`    World Normal: (${worldNormal.x.toFixed(3)}, ${worldNormal.y.toFixed(3)}, ${worldNormal.z.toFixed(3)})`);
+        console.log(`    Sun Vec: (${sunVec.x.toFixed(3)}, ${sunVec.y.toFixed(3)}, ${sunVec.z.toFixed(3)})`);
+        console.log(`    Dot product: ${dot.toFixed(3)} → Irradiance: ${irradiance.toFixed(3)}`);
+      }
+      
       // Phase 3: Shadow Analysis - Check if panel is blocked by buildings
       // Get the roof this panel is on (to exclude it from shadow checks)
       const panelRoof = panel.userData.roofMesh;
