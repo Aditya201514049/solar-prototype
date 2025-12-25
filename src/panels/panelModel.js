@@ -13,15 +13,25 @@ export function calculatePanelNormal(tilt, azimuth) {
   
   // Convert to radians
   const tiltRad = (tilt * Math.PI) / 180;
-  // Adjust azimuth so 180° (South) is the baseline, matching panel rotation
-  const azimuthRad = ((azimuth - 180) * Math.PI) / 180;
+  
+  // Convert panel azimuth to Three.js coordinate system
+  // Panel azimuth: 0°=North, 90°=East, 180°=South, 270°=West (same as solar azimuth)
+  // Three.js: +Y=North, +X=East, -Y=South, -X=West
+  // Convert to Three.js angle: threeJsAngle = 90° - panelAzimuth
+  // But we need to match the sun vector coordinate system
+  // Sun uses: threeJsAzRad = ((90 - solarAzimuth) * PI) / 180
+  // So panel should use the same: threeJsAzRad = ((90 - azimuth) * PI) / 180
+  // However, the panel rotation uses (azimuth - 180), so we need to adjust
+  // Actually, let's use the same conversion as the sun vector for consistency
+  const threeJsAzRad = ((90 - azimuth) * Math.PI) / 180;
   
   // Apply rotations in same order as panel mesh:
   // 1. Tilt around X-axis (negative rotation to tilt toward South)
   normal.applyAxisAngle(new THREE.Vector3(1, 0, 0), -tiltRad);
   
-  // 2. Azimuth rotation around Z-axis (negative for correct direction)
-  normal.applyAxisAngle(new THREE.Vector3(0, 0, 1), -azimuthRad);
+  // 2. Azimuth rotation around Z-axis
+  // Use the same coordinate system as sun vector and panel rotation
+  normal.applyAxisAngle(new THREE.Vector3(0, 0, 1), threeJsAzRad);
   
   return normal.normalize();
 }
@@ -87,9 +97,9 @@ export function createPanelMesh(position, config = null) {
   // Azimuth rotation: rotate around Z-axis (yaw)
   // In Three.js: +Y is North, +X is East
   // Azimuth: 0° = North, 90° = East, 180° = South, 270° = West
-  // Adjust so 180° (South) is the default optimal direction
-  const azimuthRad = ((azimuth - 180) * Math.PI) / 180;
-  panel.rotateZ(-azimuthRad); // Negative for correct rotation direction
+  // Use same coordinate conversion as sun vector: threeJsAngle = 90° - azimuth
+  const threeJsAzRad = ((90 - azimuth) * Math.PI) / 180;
+  panel.rotateZ(threeJsAzRad);
   
   panel.castShadow = true;
   panel.receiveShadow = true;

@@ -73,18 +73,49 @@ export function initScene() {
   scene.add(ambient);
 
   // --- Sun position for shadow casting ---
+  // Note: getSunPosition uses UTC time internally, but we pass local time
+  // For Bangladesh (UTC+6), we need to convert local time to UTC
   const now = new Date();
+  // Convert local time to UTC (Bangladesh is UTC+6)
+  // If it's 3:09 PM local, that's 9:09 AM UTC
+  const utcTime = new Date(now.getTime() - (now.getTimezoneOffset() * 60000));
+  // But getSunPosition already uses getUTCHours(), so we can just pass the Date object
+  // Actually, let's use the current local time and let getSunPosition handle it
+  // The function uses UTC internally, so we need to adjust
   const { azimuth, elevation } = getSunPosition(now, solarScene.location.lat, solarScene.location.lon);
+  
+  // Debug: log sun position and time
+  const localHours = now.getHours();
+  const localMinutes = now.getMinutes();
+  console.log(`Local time: ${localHours}:${localMinutes.toString().padStart(2, '0')} (BDT, UTC+6)`);
+  console.log('Sun position - Azimuth:', azimuth.toFixed(1), '° Elevation:', elevation.toFixed(1), '°');
   // --- Fix: Make sun position and shadows realistic ---
   const sunDist = 2000; // farther for more parallel shadows
   // In OSM/Three.js, Y is north, X is east, Z is up
-  // Azimuth: 0=north (+Y), 90=east (+X), 180=south (-Y), 270=west (-X)
-  // Elevation: 0=horizon, 90=zenith
-  const azRad = (azimuth - 180) * Math.PI / 180; // convert to Three.js: 0=south, 90=west, 180=north, 270=east
+  // Solar azimuth: 0=north, 90=east, 180=south, 270=west
+  // Three.js: +Y=north, +X=east, -Y=south, -X=west
+  // Convert solar azimuth to Three.js coordinates
+  // Solar 180° (South) should be Three.js -Y direction
+  const azRad = (azimuth * Math.PI) / 180; // Convert to radians (0-360°)
   const elRad = elevation * Math.PI / 180;
-  const sunX = sunDist * Math.cos(elRad) * Math.sin(azRad);
-  const sunY = sunDist * Math.cos(elRad) * Math.cos(azRad);
+  
+  // Convert from solar azimuth to Three.js coordinates
+  // Solar azimuth: 0°=North, 90°=East, 180°=South, 270°=West (clockwise from North)
+  // Three.js: +Y=North, +X=East, -Y=South, -X=West
+  // Standard conversion: Three.js angle = 90° - solar azimuth (in degrees)
+  // But we need to be careful: solar uses clockwise, Three.js uses counter-clockwise
+  // For solar azimuth 180° (South), we want -Y direction
+  // For solar azimuth 0° (North), we want +Y direction
+  // For solar azimuth 90° (East), we want +X direction
+  // For solar azimuth 270° (West), we want -X direction
+  const threeJsAzRad = ((90 - azimuth) * Math.PI) / 180;
+  
+  const sunX = sunDist * Math.cos(elRad) * Math.sin(threeJsAzRad);
+  const sunY = sunDist * Math.cos(elRad) * Math.cos(threeJsAzRad);
   const sunZ = sunDist * Math.sin(elRad);
+  
+  // Debug: verify sun position
+  console.log('Sun 3D position:', sunX.toFixed(1), sunY.toFixed(1), sunZ.toFixed(1));
 
   // Directional light for sun
   const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -109,10 +140,30 @@ export function initScene() {
   // Add ground plane
   createGround(scene);
 
-  // Calculate normalized sun direction vector (FROM sun TO surface)
-  // For irradiance, we need direction FROM sun TO surface
-  // Since sun is at (sunX, sunY, sunZ), direction to origin is negative normalized position
-  const sunVec = new THREE.Vector3(-sunX, -sunY, -sunZ).normalize();
+  // Calculate normalized sun direction vector (FROM surface TO sun)
+  // For Lambert's cosine law, we need the direction FROM surface TO sun
+  // This is the opposite of the direction FROM sun TO surface
+  // Sun is at elevation 23.1° above horizon, so direction should point upward (positive Z)
+  // The sun position is (sunX, sunY, sunZ), so direction FROM surface TO sun is: (sunX, sunY, sunZ) normalized
+  // But we need to recalculate from azimuth/elevation to ensure correct direction
+  // For Three.js: +Y=North, +X=East, +Z=Up
+  // Solar azimuth: 0°=North, 90°=East, 180°=South, 270°=West
+  // Direction FROM surface TO sun (pointing toward sun):
+  const sunVec = new THREE.Vector3(
+    Math.cos(elRad) * Math.sin(threeJsAzRad),
+    Math.cos(elRad) * Math.cos(threeJsAzRad),
+    Math.sin(elRad)  // Positive Z because sun is above horizon
+  ).normalize();
+  
+  // Debug: log sun position and vector for troubleshooting
+  console.log('Sun position - Azimuth:', azimuth.toFixed(1), '° Elevation:', elevation.toFixed(1), '°');
+  console.log('Sun vector (FROM sun TO surface):', sunVec.x.toFixed(3), sunVec.y.toFixed(3), sunVec.z.toFixed(3));
+  
+  // Test: Calculate irradiance for a flat panel (should be cos(elevation))
+  const flatNormal = new THREE.Vector3(0, 0, 1);
+  const flatIrradiance = Math.max(0, sunVec.dot(flatNormal));
+  console.log('Flat panel irradiance:', flatIrradiance.toFixed(3), 'Expected cos(elevation):', Math.cos(elRad).toFixed(3), 'Actual sin(elevation):', Math.sin(elRad).toFixed(3));
+  console.log('Sun vector Z component:', sunVec.z.toFixed(3), 'Should equal sin(elevation) for correct direction');
 
   // Add buildings with shadow casting and irradiance-colored roofs
   const roofMeshes = addBuildings3D(scene, center, sunVec);

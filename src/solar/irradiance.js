@@ -2,7 +2,7 @@
  * Calculate direct solar irradiance on a surface
  * Uses Lambert's cosine law: irradiance = cos(angle between sun and surface normal)
  * 
- * @param {THREE.Vector3} sunDir - Normalized sun direction vector (pointing FROM sun TO surface)
+ * @param {THREE.Vector3} sunDir - Normalized sun direction vector (pointing FROM surface TO sun)
  * @param {THREE.Vector3} surfaceNormal - Normalized surface normal vector (pointing outward)
  * @returns {number} Irradiance value (0..1, where 1 = maximum, 0 = no direct sunlight)
  */
@@ -55,11 +55,12 @@ export function calcPanelIrradianceFromOrientation(tilt, azimuth, sunVec) {
 	
 	// Convert to radians
 	const tiltRad = (tilt * Math.PI) / 180;
-	const azimuthRad = ((azimuth - 180) * Math.PI) / 180;
+	// Use same coordinate conversion as sun vector and panelModel.js
+	const threeJsAzRad = ((90 - azimuth) * Math.PI) / 180;
 	
 	// Apply rotations (same as in panelModel.js)
 	normal.applyAxisAngle(new THREE.Vector3(1, 0, 0), -tiltRad);
-	normal.applyAxisAngle(new THREE.Vector3(0, 0, 1), -azimuthRad);
+	normal.applyAxisAngle(new THREE.Vector3(0, 0, 1), threeJsAzRad);
 	normal.normalize();
 	
 	return calcIrradiance(sunVec, normal);

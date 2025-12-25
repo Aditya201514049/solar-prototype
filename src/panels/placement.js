@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { panelConfig } from './panelConfig';
 import { createPanelMesh } from './panelModel';
-import { calcPanelIrradiance } from '../solar/irradiance';
+import { calcPanelIrradiance, calcIrradiance } from '../solar/irradiance';
 
 /**
  * Sets up panel placement system with raycasting and event handlers
@@ -23,36 +23,64 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
     
     // Calculate irradiance for this panel
     if (sunVec) {
-      const irradiance = calcPanelIrradiance(panel, sunVec);
+      // Get the actual world-space normal from the rotated panel
+      // This ensures the normal matches the visual orientation
+      panel.updateMatrixWorld(true);
+      
+      // Create a vector pointing up in panel's local space
+      const localUp = new THREE.Vector3(0, 0, 1);
+      // Transform to world space using panel's rotation matrix
+      const worldNormal = localUp.clone();
+      worldNormal.transformDirection(panel.matrixWorld);
+      worldNormal.normalize();
+      
+      // Use the world-space normal for irradiance calculation
+      const irradiance = calcIrradiance(sunVec, worldNormal);
+      
+      // Debug: log irradiance for all panels (with color info)
+      console.log(`Panel ${panelMeshes.length + 1}: Tilt=${panel.userData.tilt}° Azimuth=${panel.userData.azimuth}° → Irradiance=${irradiance.toFixed(3)} (${irradiance < 0.3 ? 'BLUE' : irradiance < 0.6 ? 'GREEN/CYAN' : irradiance < 0.85 ? 'YELLOW' : 'RED/ORANGE'})`);
+      
+      // Also store in userData for reference
+      panel.userData.irradiance = irradiance;
+      panel.userData.worldNormal = worldNormal; // Store for later use
       
       // Color panel based on irradiance
-      // Blue (low) to Yellow/Green (medium) to Red (high)
-      // Use a gradient: blue (0) -> cyan -> yellow -> red (1)
+      // Optimized for low sun elevation: More variation in lower ranges
+      // Blue (low) -> Cyan -> Green -> Yellow -> Orange -> Red (high)
       let color;
       if (irradiance < 0.1) {
         // Very low: dark blue
-        color = new THREE.Color().setHSL(0.6, 1, 0.3);
-      } else if (irradiance < 0.5) {
-        // Low to medium: blue to cyan
-        const t = (irradiance - 0.1) / 0.4;
-        color = new THREE.Color().setHSL(0.6 - t * 0.2, 1, 0.3 + t * 0.3);
-      } else if (irradiance < 0.8) {
-        // Medium to high: cyan to yellow
-        const t = (irradiance - 0.5) / 0.3;
-        color = new THREE.Color().setHSL(0.4 - t * 0.2, 1, 0.6 + t * 0.2);
+        color = new THREE.Color().setHSL(0.6, 1, 0.25);
+      } else if (irradiance < 0.25) {
+        // Low: blue to cyan (more variation here)
+        const t = (irradiance - 0.1) / 0.15;
+        color = new THREE.Color().setHSL(0.6 - t * 0.2, 1, 0.25 + t * 0.25);
+      } else if (irradiance < 0.4) {
+        // Medium-low: cyan to green
+        const t = (irradiance - 0.25) / 0.15;
+        color = new THREE.Color().setHSL(0.4 - t * 0.15, 1, 0.5 + t * 0.15);
+      } else if (irradiance < 0.55) {
+        // Medium: green to yellow-green
+        const t = (irradiance - 0.4) / 0.15;
+        color = new THREE.Color().setHSL(0.25 - t * 0.1, 1, 0.65 + t * 0.1);
+      } else if (irradiance < 0.7) {
+        // Medium-high: yellow-green to yellow
+        const t = (irradiance - 0.55) / 0.15;
+        color = new THREE.Color().setHSL(0.15 - t * 0.05, 1, 0.75 + t * 0.05);
+      } else if (irradiance < 0.85) {
+        // High: yellow to orange
+        const t = (irradiance - 0.7) / 0.15;
+        color = new THREE.Color().setHSL(0.1 - t * 0.05, 1, 0.8 - t * 0.1);
       } else {
-        // High: yellow to red
-        const t = (irradiance - 0.8) / 0.2;
-        color = new THREE.Color().setHSL(0.2 - t * 0.2, 1, 0.8 - t * 0.3);
+        // Very high: orange to red
+        const t = (irradiance - 0.85) / 0.15;
+        color = new THREE.Color().setHSL(0.05 - t * 0.05, 1, 0.7 - t * 0.2);
       }
       
       // Update panel material color based on irradiance
       panel.material.color.copy(color);
       // Keep some emissive glow but reduce it for low irradiance
       panel.material.emissive.set(color).multiplyScalar(0.3 * irradiance);
-      
-      // Store irradiance value in userData for later use
-      panel.userData.irradiance = irradiance;
     }
     
     scene.add(panel);
@@ -63,28 +91,42 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
   // Function to update all panel colors based on current sun position
   function updatePanelIrradiance(newSunVec) {
     panelMeshes.forEach(panel => {
-      if (panel.userData.normal) {
-        const irradiance = calcPanelIrradiance(panel, newSunVec);
-        
-        // Update color based on new irradiance
-        let color;
-        if (irradiance < 0.1) {
-          color = new THREE.Color().setHSL(0.6, 1, 0.3);
-        } else if (irradiance < 0.5) {
-          const t = (irradiance - 0.1) / 0.4;
-          color = new THREE.Color().setHSL(0.6 - t * 0.2, 1, 0.3 + t * 0.3);
-        } else if (irradiance < 0.8) {
-          const t = (irradiance - 0.5) / 0.3;
-          color = new THREE.Color().setHSL(0.4 - t * 0.2, 1, 0.6 + t * 0.2);
-        } else {
-          const t = (irradiance - 0.8) / 0.2;
-          color = new THREE.Color().setHSL(0.2 - t * 0.2, 1, 0.8 - t * 0.3);
-        }
-        
-        panel.material.color.copy(color);
-        panel.material.emissive.set(color).multiplyScalar(0.3 * irradiance);
-        panel.userData.irradiance = irradiance;
+      // Get world-space normal from panel rotation
+      panel.updateMatrixWorld(true);
+      const localUp = new THREE.Vector3(0, 0, 1);
+      const worldNormal = localUp.clone();
+      worldNormal.transformDirection(panel.matrixWorld);
+      worldNormal.normalize();
+      
+      const irradiance = calcIrradiance(newSunVec, worldNormal);
+      
+      // Use same color gradient as addPanelToScene
+      let color;
+      if (irradiance < 0.1) {
+        color = new THREE.Color().setHSL(0.6, 1, 0.25);
+      } else if (irradiance < 0.25) {
+        const t = (irradiance - 0.1) / 0.15;
+        color = new THREE.Color().setHSL(0.6 - t * 0.2, 1, 0.25 + t * 0.25);
+      } else if (irradiance < 0.4) {
+        const t = (irradiance - 0.25) / 0.15;
+        color = new THREE.Color().setHSL(0.4 - t * 0.15, 1, 0.5 + t * 0.15);
+      } else if (irradiance < 0.55) {
+        const t = (irradiance - 0.4) / 0.15;
+        color = new THREE.Color().setHSL(0.25 - t * 0.1, 1, 0.65 + t * 0.1);
+      } else if (irradiance < 0.7) {
+        const t = (irradiance - 0.55) / 0.15;
+        color = new THREE.Color().setHSL(0.15 - t * 0.05, 1, 0.75 + t * 0.05);
+      } else if (irradiance < 0.85) {
+        const t = (irradiance - 0.7) / 0.15;
+        color = new THREE.Color().setHSL(0.1 - t * 0.05, 1, 0.8 - t * 0.1);
+      } else {
+        const t = (irradiance - 0.85) / 0.15;
+        color = new THREE.Color().setHSL(0.05 - t * 0.05, 1, 0.7 - t * 0.2);
       }
+      
+      panel.material.color.copy(color);
+      panel.material.emissive.set(color).multiplyScalar(0.3 * irradiance);
+      panel.userData.irradiance = irradiance;
     });
   }
 
