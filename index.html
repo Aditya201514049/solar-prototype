@@ -11,10 +11,25 @@
         <button id="place-panel">Place Panel</button>
         <button id="panel-settings">Panel Settings</button>
         <button id="remove-panels">Remove Panels</button>
+        <button id="toggle-panel-info">Panel Info</button>
       </nav>
       
       <canvas id="map" width="1300" height="800"></canvas>
       <div id="threejs-container"></div>
+      
+      <!-- Panel Info Sidebar -->
+      <div id="panel-info-sidebar" class="panel-sidebar">
+        <div class="sidebar-header">
+          <h3>Placed Panels</h3>
+          <button class="close-button" id="close-sidebar">&times;</button>
+        </div>
+        <div id="panel-list" class="panel-list">
+          <div class="empty-state">
+            <p>No panels placed yet.</p>
+            <p class="empty-hint">Click "Place Panel" to start adding panels.</p>
+          </div>
+        </div>
+      </div>
       
       <!-- Panel Customization Modal -->
       <div id="panel-customization-modal" class="modal">

@@ -3,6 +3,7 @@ import { panelConfig } from './panelConfig';
 import { createPanelMesh } from './panelModel';
 import { calcPanelIrradiance, calcIrradiance } from '../solar/irradiance';
 import { calculatePanelShadowFactor } from '../solar/shadowAnalysis';
+import { updatePanelInfoSidebar, setupSidebarToggle, highlightPanelCard } from './panelInfo';
 
 /**
  * Sets up panel placement system with raycasting and event handlers
@@ -17,9 +18,13 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
   const placedPanels = [];
   const panelMeshes = [];
   let placingPanel = false;
+  let selectedPanelIndex = -1;
   
   // Store panel-to-roof mapping for shadow analysis
   const panelToRoofMap = new Map();
+  
+  // Store original materials for highlighting
+  const originalMaterials = new Map();
 
   // Helper to add a panel mesh to the scene with irradiance-based coloring
   function addPanelToScene(position, config = null) {
@@ -121,7 +126,9 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
   
   // Function to update all panel colors based on current sun position
   function updatePanelIrradiance(newSunVec) {
-    panelMeshes.forEach(panel => {
+    const wasHighlighted = selectedPanelIndex >= 0;
+    
+    panelMeshes.forEach((panel, index) => {
       // Get world-space normal from panel rotation
       panel.updateMatrixWorld(true);
       const localUp = new THREE.Vector3(0, 0, 1);
@@ -139,6 +146,9 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
       // Update shadow info
       panel.userData.shadowFactor = shadowFactor;
       panel.userData.inShadow = shadowFactor < 0.5;
+      
+      // Update userData irradiance
+      panel.userData.irradiance = irradiance;
       
       // Use same color gradient as addPanelToScene
       let color;
@@ -171,10 +181,27 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
         color.multiplyScalar(0.8 + shadowFactor * 0.2);
       }
       
-      panel.material.color.copy(color);
-      panel.material.emissive.set(color).multiplyScalar(0.3 * irradiance);
-      panel.userData.irradiance = irradiance;
+      // Update material (preserve highlight if this panel is selected)
+      if (index === selectedPanelIndex && wasHighlighted) {
+        // Keep highlight but update base color
+        panel.material.color.copy(color);
+        panel.material.emissive.set(0x00ffff).multiplyScalar(0.5); // Maintain cyan highlight
+        panel.material.emissiveIntensity = 1.5;
+      } else {
+        panel.material.color.copy(color);
+        panel.material.emissive.set(color).multiplyScalar(0.3 * irradiance);
+      }
+      
+      // Update original material for future highlighting
+      if (originalMaterials.has(panel)) {
+        const origMat = originalMaterials.get(panel);
+        origMat.color.copy(color);
+        origMat.emissive.set(color).multiplyScalar(0.3 * irradiance);
+      }
     });
+    
+    // Update sidebar after recalculating irradiance
+    updatePanelInfoSidebar(panelMeshes);
   }
 
   // Panel placement button handler
@@ -231,7 +258,56 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
         // Store reference to roof for shadow analysis (exclude this roof from shadow checks)
         if (panel) {
           panel.userData.roofMesh = roofMesh;
+          // Recalculate shadow with roofMesh now set (if sunVec exists)
+          if (sunVec) {
+            panel.updateMatrixWorld(true);
+            const localUp = new THREE.Vector3(0, 0, 1);
+            const worldNormal = localUp.clone();
+            worldNormal.transformDirection(panel.matrixWorld);
+            worldNormal.normalize();
+            let irradiance = calcIrradiance(sunVec, worldNormal);
+            const shadowFactor = calculatePanelShadowFactor(panel, sunVec, roofMeshes, 4, roofMesh);
+            irradiance *= shadowFactor;
+            panel.userData.shadowFactor = shadowFactor;
+            panel.userData.inShadow = shadowFactor < 0.5;
+            panel.userData.irradiance = irradiance;
+            
+            // Update panel color based on recalculated irradiance
+            let color;
+            if (irradiance < 0.1) {
+              color = new THREE.Color().setHSL(0.6, 1, 0.2);
+            } else if (irradiance < 0.25) {
+              const t = (irradiance - 0.1) / 0.15;
+              color = new THREE.Color().setHSL(0.6 - t * 0.2, 1, 0.2 + t * 0.25);
+            } else if (irradiance < 0.4) {
+              const t = (irradiance - 0.25) / 0.15;
+              color = new THREE.Color().setHSL(0.4 - t * 0.15, 1, 0.45 + t * 0.15);
+            } else if (irradiance < 0.55) {
+              const t = (irradiance - 0.4) / 0.15;
+              color = new THREE.Color().setHSL(0.25 - t * 0.1, 1, 0.6 + t * 0.1);
+            } else if (irradiance < 0.7) {
+              const t = (irradiance - 0.55) / 0.15;
+              color = new THREE.Color().setHSL(0.15 - t * 0.05, 1, 0.7 + t * 0.05);
+            } else if (irradiance < 0.85) {
+              const t = (irradiance - 0.7) / 0.15;
+              color = new THREE.Color().setHSL(0.1 - t * 0.05, 1, 0.75 - t * 0.1);
+            } else {
+              const t = (irradiance - 0.85) / 0.15;
+              color = new THREE.Color().setHSL(0.05 - t * 0.05, 1, 0.65 - t * 0.2);
+            }
+            
+            if (shadowFactor < 0.5) {
+              color.multiplyScalar(0.6);
+            } else if (shadowFactor < 1.0) {
+              color.multiplyScalar(0.8 + shadowFactor * 0.2);
+            }
+            
+            panel.material.color.copy(color);
+            panel.material.emissive.set(color).multiplyScalar(0.3 * irradiance);
+          }
         }
+        // Update sidebar after panel is added
+        updatePanelInfoSidebar(panelMeshes);
       }
     }
 
@@ -259,7 +335,18 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
         if (idx !== -1) {
           panelMeshes.splice(idx, 1);
           placedPanels.splice(idx, 1);
+          // Clear selection if removed panel was selected
+          if (selectedPanelIndex === idx) {
+            selectedPanelIndex = -1;
+            clearPanelHighlight();
+          } else if (selectedPanelIndex > idx) {
+            selectedPanelIndex--; // Adjust selection index
+          }
+          // Remove from original materials map
+          originalMaterials.delete(hitPanel);
         }
+        // Update sidebar after removing panel
+        updatePanelInfoSidebar(panelMeshes);
       }
     }
   });
@@ -278,6 +365,10 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
       // Clear the arrays
       panelMeshes.length = 0;
       placedPanels.length = 0;
+      selectedPanelIndex = -1;
+      originalMaterials.clear();
+      // Update sidebar
+      updatePanelInfoSidebar(panelMeshes);
     });
   }
 
@@ -290,14 +381,74 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
         panel.userData.roofMesh = roofMeshes[p.roofIdx].mesh;
       }
     });
+    updatePanelInfoSidebar(panelMeshes);
   }
+
+  // Panel highlighting functions
+  function highlightPanel(panelIndex) {
+    if (panelIndex < 0 || panelIndex >= panelMeshes.length) return;
+    
+    // Clear previous highlight
+    clearPanelHighlight();
+    
+    // Highlight selected panel
+    selectedPanelIndex = panelIndex;
+    const panel = panelMeshes[panelIndex];
+    
+    // Create highlight effect using outline material
+    const highlightMaterial = panel.material.clone();
+    highlightMaterial.emissive.set(0x00ffff).multiplyScalar(0.5); // Cyan glow
+    highlightMaterial.emissiveIntensity = 1.5;
+    
+    // Store original and apply highlight
+    if (!originalMaterials.has(panel)) {
+      originalMaterials.set(panel, panel.material.clone());
+    }
+    panel.material = highlightMaterial;
+    
+    // Highlight in sidebar
+    highlightPanelCard(panelIndex);
+    
+    // Optional: Focus camera on panel (smooth transition)
+    const panelPosition = panel.position.clone();
+    const cameraOffset = new THREE.Vector3(0, -200, 200);
+    const targetPosition = panelPosition.clone().add(cameraOffset);
+    
+    // Animate camera to panel (optional - can be enabled if desired)
+    // animateCameraToPosition(camera, controls, targetPosition, panelPosition);
+  }
+
+  function clearPanelHighlight() {
+    if (selectedPanelIndex >= 0 && selectedPanelIndex < panelMeshes.length) {
+      const panel = panelMeshes[selectedPanelIndex];
+      if (originalMaterials.has(panel)) {
+        panel.material = originalMaterials.get(panel);
+      }
+    }
+    selectedPanelIndex = -1;
+    
+    // Clear sidebar selection
+    document.querySelectorAll('.panel-card').forEach(c => {
+      c.classList.remove('selected');
+    });
+  }
+
+  // Setup sidebar toggle with panel selection callback
+  setupSidebarToggle((panelIndex) => {
+    highlightPanel(panelIndex);
+  });
+
+  // Initialize sidebar (show empty state)
+  updatePanelInfoSidebar(panelMeshes);
 
   return {
     placedPanels,
     panelMeshes,
     restorePanels,
     addPanelToScene,
-    updatePanelIrradiance
+    updatePanelIrradiance,
+    highlightPanel,
+    clearPanelHighlight
   };
 }
 
