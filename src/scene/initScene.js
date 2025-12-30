@@ -75,10 +75,10 @@ export function initScene() {
   // --- Sun position for shadow casting ---
   // Note: getSunPosition uses UTC time internally, but we pass local time
   // For Bangladesh (UTC+6), we need to convert local time to UTC
-  const now = new Date();
+  // const now = new Date();
 
   //fixed date and time to view constant sunlight
-  // const now = new Date('2025-12-22T14:00:00');
+  const now = new Date('2025-12-22T14:00:00');
 
   // Convert local time to UTC (Bangladesh is UTC+6)
   // If it's 3:09 PM local, that's 9:09 AM UTC

@@ -15,6 +15,7 @@ const state = {
 
 // Generate Overpass query for Dhaka, Bangladesh
 const query = buildOverpassQuery(23.7800, 90.4000, 23.7820, 90.4020);
+// const query = buildOverpassQuery(24.892, 91.863, 24.894, 91.865);
 
 // Fetch OSM data
 fetchOSM(query)
