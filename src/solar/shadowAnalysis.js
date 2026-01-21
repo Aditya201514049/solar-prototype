@@ -8,7 +8,7 @@ import * as THREE from 'three';
  * @param {number} maxDistance - Maximum distance to check for shadows (default: 1000m)
  * @returns {boolean} True if point is in shadow, false otherwise
  */
-export function isPointInShadow(point, sunVec, buildingMeshes, maxDistance = 1000) {
+export function isPointInShadow(point, sunVec, buildingMeshes, maxDistance = 1000, debugLabel = null) {
   // Create a raycaster to check for intersections
   const raycaster = new THREE.Raycaster();
   
@@ -21,11 +21,23 @@ export function isPointInShadow(point, sunVec, buildingMeshes, maxDistance = 100
   raycaster.set(point, rayDirection);
   
   // Check intersections with all building meshes
-  // Exclude the panel itself and the roof it's on (if needed)
+  // buildingMeshes is an array of objects with {mesh, building, ...}
+  // Extract just the mesh objects
+  const meshesToIntersect = buildingMeshes.map(r => r.mesh);
   const intersects = raycaster.intersectObjects(
-    buildingMeshes.map(r => r.mesh),
+    meshesToIntersect,
     false // Don't check children
   );
+  
+  if (debugLabel) {
+    console.log(`  [${debugLabel}] Ray from (${point.x.toFixed(1)}, ${point.y.toFixed(1)}, ${point.z.toFixed(1)}) in direction (${rayDirection.x.toFixed(2)}, ${rayDirection.y.toFixed(2)}, ${rayDirection.z.toFixed(2)})`);
+    console.log(`    Checking ${meshesToIntersect.length} meshes, found ${intersects.length} intersections`);
+    if (intersects.length > 0) {
+      intersects.slice(0, 3).forEach((hit, i) => {
+        console.log(`    Hit ${i}: distance=${hit.distance.toFixed(1)}m`);
+      });
+    }
+  }
   
   // If there are intersections and the first one is close (within maxDistance),
   // the point is in shadow
@@ -34,8 +46,10 @@ export function isPointInShadow(point, sunVec, buildingMeshes, maxDistance = 100
     // Check if intersection is between point and sun (not behind the point)
     // Use a small threshold to avoid immediate intersections with the panel's own roof
     if (firstIntersection.distance > 0.5 && firstIntersection.distance < maxDistance) {
+      if (debugLabel) console.log(`    → IN SHADOW (distance ${firstIntersection.distance.toFixed(1)}m)`);
       return true; // Point is in shadow
     }
+    if (debugLabel) console.log(`    → NOT in shadow (distance ${firstIntersection.distance.toFixed(1)}m not valid)`);
   }
   
   return false; // Point is not in shadow
@@ -107,20 +121,35 @@ export function calculatePanelShadowFactor(panelMesh, sunVec, buildingMeshes, sa
     return worldPoint;
   });
   
+  console.log(`\n[SHADOW] Panel at (${center.x.toFixed(1)}, ${center.y.toFixed(1)}, ${center.z.toFixed(1)}), checking ${samples.length} sample points`);
+  console.log(`  buildingMeshes.length=${buildingMeshes.length}, excludeMesh=${excludeMesh ? 'YES' : 'NO'}`);
+  
   // Check each sample point
   let shadowedCount = 0;
-  samples.forEach(samplePoint => {
+  samples.forEach((samplePoint, idx) => {
     // Filter out the excludeMesh (roof the panel is on) from shadow checks
-    const meshesToCheck = excludeMesh 
-      ? buildingMeshes.filter(r => r.mesh !== excludeMesh)
-      : buildingMeshes;
+    // Create a new array with only the meshes we want to check
+    let meshesToCheck = buildingMeshes;
+    if (excludeMesh) {
+      // Filter the buildingMeshes array to exclude the target mesh
+      meshesToCheck = buildingMeshes.filter(roofObj => roofObj.mesh !== excludeMesh);
+      const excluded = buildingMeshes.length - meshesToCheck.length;
+      if (excluded > 0) {
+        console.log(`  Sample ${idx + 1}: Excluded ${excluded} roof mesh, checking ${meshesToCheck.length} remaining`);
+      } else {
+        console.log(`  Sample ${idx + 1}: No mesh excluded (excludeMesh not found in array!), checking all ${meshesToCheck.length}`);
+      }
+    }
     
-    if (isPointInShadow(samplePoint, sunVec, meshesToCheck)) {
+    if (isPointInShadow(samplePoint, sunVec, meshesToCheck, 1000, `Sample${idx + 1}`)) {
       shadowedCount++;
     }
   });
   
+  const shadowFactor = 1 - (shadowedCount / samples.length);
+  console.log(`  → Result: ${shadowedCount}/${samples.length} shadowed = shadow factor ${shadowFactor.toFixed(2)}\n`);
+  
   // Return fraction of panel that's not shadowed
-  return 1 - (shadowedCount / samples.length);
+  return shadowFactor;
 }
 

@@ -53,7 +53,10 @@ function createPanelCard(panel, panelNumber) {
   // Determine shadow status
   let shadowStatus = 'clear';
   let shadowText = 'CLEAR';
-  if (shadowFactor < 0.5) {
+  if (irradiance < 0.01) {
+    shadowStatus = 'shadowed';
+    shadowText = 'NO SUN';
+  } else if (shadowFactor < 0.5) {
     shadowStatus = 'shadowed';
     shadowText = 'SHADOWED';
   } else if (shadowFactor < 1.0) {

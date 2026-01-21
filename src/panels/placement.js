@@ -27,8 +27,16 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
   const originalMaterials = new Map();
 
   // Helper to add a panel mesh to the scene with irradiance-based coloring
-  function addPanelToScene(position, config = null) {
+  function addPanelToScene(position, config = null, panelRoof = null) {
     const panel = createPanelMesh(position, config);
+    
+    // Store roof mesh immediately if provided
+    if (panelRoof) {
+      panel.userData.roofMesh = panelRoof;
+      console.log(`[PANEL] Creating panel with roof mesh reference`, panelRoof);
+    } else {
+      console.log(`[PANEL] Creating panel WITHOUT roof mesh reference`);
+    }
     
     // Calculate irradiance for this panel
     if (sunVec) {
@@ -56,9 +64,10 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
       }
       
       // Phase 3: Shadow Analysis - Check if panel is blocked by buildings
-      // Get the roof this panel is on (to exclude it from shadow checks)
-      const panelRoof = panel.userData.roofMesh;
-      const shadowFactor = calculatePanelShadowFactor(panel, sunVec, roofMeshes, 4, panelRoof);
+      // Use the provided roof or try to get it from userData
+      const excludeRoof = panelRoof || panel.userData.roofMesh;
+      console.log(`[PANEL] Shadow calc - excludeRoof is ${excludeRoof ? 'SET' : 'NULL'}`);
+      const shadowFactor = calculatePanelShadowFactor(panel, sunVec, roofMeshes, 4, excludeRoof);
       irradiance *= shadowFactor; // Reduce irradiance if in shadow
       
       // Store shadow info for debugging
@@ -246,6 +255,8 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
         const roofIdx = roofMeshes.findIndex(r => r.mesh === hit.object);
         const roofMesh = roofMeshes[roofIdx].mesh;
         
+        console.log(`[PLACEMENT] Roof index: ${roofIdx}, total roofs: ${roofMeshes.length}`);
+        
         // Store panel position and configuration (including roof index for restoration)
         placedPanels.push({
           position: hit.point.clone(),
@@ -254,7 +265,8 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
         });
         
         // Visualize panel immediately with current configuration
-        const panel = addPanelToScene(hit.point, config);
+        // Pass the roof mesh so shadow analysis works correctly from the start
+        const panel = addPanelToScene(hit.point, config, roofMesh);
         // Store reference to roof for shadow analysis (exclude this roof from shadow checks)
         if (panel) {
           panel.userData.roofMesh = roofMesh;
@@ -375,10 +387,16 @@ export function setupPanelPlacement(scene, camera, renderer, roofMeshes, sunVec)
   // Function to restore previously placed panels
   function restorePanels() {
     placedPanels.forEach(p => {
-      const panel = addPanelToScene(p.position, p.config);
-      // Restore roof reference if available
-      if (panel && p.roofIdx !== undefined && roofMeshes[p.roofIdx]) {
-        panel.userData.roofMesh = roofMeshes[p.roofIdx].mesh;
+      // Get the roof mesh if available
+      const roofMesh = p.roofIdx !== undefined && roofMeshes[p.roofIdx] 
+        ? roofMeshes[p.roofIdx].mesh 
+        : null;
+      
+      // Pass roof mesh so shadow analysis works correctly
+      const panel = addPanelToScene(p.position, p.config, roofMesh);
+      // Also store roof reference in userData for shadow analysis
+      if (panel && roofMesh) {
+        panel.userData.roofMesh = roofMesh;
       }
     });
     updatePanelInfoSidebar(panelMeshes);
